@@ -3,7 +3,7 @@
 #include <windows.h> 
 using namespace std;
 
-//комментарий
+//комментарий2
 
 // Прототипы функций
 float* Proc1();
