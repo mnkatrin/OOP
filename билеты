@@ -1,0 +1,55 @@
+class Rack:
+    def __init__(self, code, number, cells, max_weight):
+        self.code, self.number, self.cells, self.max_weight = code, number, cells, max_weight
+        self.filled = [None] * cells
+
+class Cargo:
+    def __init__(self, code, name):
+        self.code, self.name = code, name
+
+class Warehouse:
+    def __init__(self, file="data.txt"):
+        self.racks, self.cargos, self.positions = [], [], []
+        self.load(file)
+    
+    def load(self, file):
+        with open(file, 'r', encoding='utf-8') as f:
+            for line in f:
+                parts = line.strip().split('|')
+                if parts[0] == 'RACK':
+                    self.racks.append(Rack(parts[1], int(parts[2]), int(parts[3]), float(parts[4])))
+                elif parts[0] == 'CARGO':
+                    self.cargos.append(Cargo(parts[1], parts[2]))
+                elif parts[0] == 'POSITION':
+                    self.positions.append(parts[1:])
+                    for r in self.racks:
+                        if r.code == parts[2]:
+                            r.filled[int(parts[3])] = parts[1]
+    
+    def free_cells(self):
+        total = sum(r.cells for r in self.racks)
+        used = sum(1 for r in self.racks for c in r.filled if c)
+        return total - used
+    
+    def weight_percent(self):
+        total_max = sum(r.max_weight for r in self.racks)
+        total_cur = sum(float(p[3]) for p in self.positions)
+        return (total_cur / total_max * 100) if total_max > 0 else 0
+    
+    def save_report(self, file="report.txt"):
+        free = self.free_cells()
+        percent = self.weight_percent()
+        
+        with open(file, 'w', encoding='utf-8') as f:
+            f.write(f"Свободных ячеек: {free}\n")
+            f.write(f"Заполнение по массе: {percent:.1f}%\n")
+            f.write("\nДетали:\n")
+            for r in self.racks:
+                used = sum(1 for c in r.filled if c)
+                f.write(f"Стеллаж {r.number}: {used}/{r.cells} ячеек\n")
+        
+        print(f"Отчет в {file}: свободных ячеек={free}, масса={percent:.1f}%")
+
+# Запуск
+w = Warehouse("data.txt")
+w.save_report()
