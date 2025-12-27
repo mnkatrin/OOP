@@ -1,0 +1,332 @@
+from datetime import datetime
+
+# ========== КЛАССЫ (часть 2) ==========
+class Rack:
+    """Стеллаж (таблица Стеллажи)"""
+    def __init__(self, code, number, cells_count, max_weight):
+        self.code = code          # Код стеллажа
+        self.number = number      # Номер стеллажа
+        self.cells_count = cells_count  # Количество ячеек
+        self.max_weight = max_weight    # Допустимая масса
+        self.cells = [None] * cells_count  # Ячейки (None - свободно)
+    
+    def __str__(self):
+        return f"Стеллаж {self.number} (код: {self.code}), ячеек: {self.cells_count}, макс. масса: {self.max_weight}кг"
+
+
+class Cargo:
+    """Груз (таблица Груз)"""
+    def __init__(self, code, name):
+        self.code = code  # Код груза
+        self.name = name  # Название груза
+    
+    def __str__(self):
+        return f"Груз: {self.name} (код: {self.code})"
+
+
+class Position:
+    """Позиция размещения (таблица Позиция)"""
+    def __init__(self, cargo_code, rack_code, cell_number, weight, placement_date):
+        self.cargo_code = cargo_code      # Код груза (внешний ключ)
+        self.rack_code = rack_code        # Код стеллажа (внешний ключ)
+        self.cell_number = cell_number    # Номер ячейки
+        self.weight = weight              # Масса груза
+        self.placement_date = placement_date  # Дата укладки
+    
+    def __str__(self):
+        return f"Позиция: груз {self.cargo_code} -> стеллаж {self.rack_code}, ячейка {self.cell_number}, {self.weight}кг, {self.placement_date}"
+
+
+# ========== ПРОГРАММА (часть 3) ==========
+class WarehouseSystem:
+    """Система управления складом"""
+    
+    def __init__(self):
+        self.racks = []      # список стеллажей
+        self.cargos = []     # список грузов
+        self.positions = []  # список позиций
+    
+    def add_rack(self, rack):
+        """Добавить стеллаж"""
+        self.racks.append(rack)
+    
+    def add_cargo(self, cargo):
+        """Добавить груз"""
+        self.cargos.append(cargo)
+    
+    def place_cargo(self, cargo_code, rack_code, cell_number, weight):
+        """Разместить груз на стеллаже"""
+        # Проверяем существование груза и стеллажа
+        cargo = self._find_cargo_by_code(cargo_code)
+        rack = self._find_rack_by_code(rack_code)
+        
+        if not cargo or not rack:
+            return False
+        
+        # Проверяем валидность ячейки
+        if cell_number < 0 or cell_number >= rack.cells_count:
+            return False
+        
+        # Проверяем, свободна ли ячейка
+        if rack.cells[cell_number] is not None:
+            return False
+        
+        # Проверяем допустимую массу
+        current_weight = self._get_rack_current_weight(rack_code)
+        if current_weight + weight > rack.max_weight:
+            return False
+        
+        # Размещаем груз
+        rack.cells[cell_number] = cargo_code
+        
+        # Создаем запись о позиции
+        position = Position(cargo_code, rack_code, cell_number, weight, datetime.now())
+        self.positions.append(position)
+        return True
+    
+    def remove_cargo(self, rack_code, cell_number):
+        """Убрать груз из ячейки"""
+        rack = self._find_rack_by_code(rack_code)
+        if not rack:
+            return False
+        
+        if cell_number < 0 or cell_number >= rack.cells_count:
+            return False
+        
+        if rack.cells[cell_number] is None:
+            return False
+        
+        # Убираем груз
+        cargo_code = rack.cells[cell_number]
+        rack.cells[cell_number] = None
+        
+        # Удаляем запись о позиции
+        self.positions = [p for p in self.positions 
+                         if not (p.rack_code == rack_code and p.cell_number == cell_number)]
+        return True
+    
+    def _find_rack_by_code(self, code):
+        """Найти стеллаж по коду"""
+        for rack in self.racks:
+            if rack.code == code:
+                return rack
+        return None
+    
+    def _find_cargo_by_code(self, code):
+        """Найти груз по коду"""
+        for cargo in self.cargos:
+            if cargo.code == code:
+                return cargo
+        return None
+    
+    def _get_rack_current_weight(self, rack_code):
+        """Получить текущую массу на стеллаже"""
+        total_weight = 0
+        for position in self.positions:
+            if position.rack_code == rack_code:
+                total_weight += position.weight
+        return total_weight
+    
+    def calculate_free_cells(self):
+        """а) Рассчитать количество свободных ячеек"""
+        total_cells = 0
+        free_cells = 0
+        
+        for rack in self.racks:
+            total_cells += rack.cells_count
+            free_cells += sum(1 for cell in rack.cells if cell is None)
+        
+        return free_cells, total_cells
+    
+    def calculate_weight_percentage(self):
+        """б) Рассчитать заполнение по массе в процентах"""
+        total_max_weight = 0
+        total_current_weight = 0
+        
+        for rack in self.racks:
+            total_max_weight += rack.max_weight
+            total_current_weight += self._get_rack_current_weight(rack.code)
+        
+        if total_max_weight == 0:
+            return 0
+        
+        percentage = (total_current_weight / total_max_weight) * 100
+        return percentage
+    
+    def generate_report(self, filename="warehouse_report.txt"):
+        """Сгенерировать отчет в текстовый файл"""
+        # а) Количество свободных ячеек
+        free_cells, total_cells = self.calculate_free_cells()
+        
+        # б) Заполнение по массе в процентах
+        weight_percentage = self.calculate_weight_percentage()
+        
+        with open(filename, 'w', encoding='utf-8') as file:
+            file.write("ОТЧЕТ ПО СКЛАДУ\n")
+            file.write("=" * 50 + "\n")
+            file.write(f"Дата формирования: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+            
+            file.write("СТАТИСТИКА:\n")
+            file.write(f"Количество стеллажей: {len(self.racks)}\n")
+            file.write(f"Количество грузов: {len(self.cargos)}\n")
+            file.write(f"Размещено грузов: {len(self.positions)}\n\n")
+            
+            # а) Количество свободных ячеек
+            file.write("ЗАПОЛНЕНИЕ ЯЧЕЕК:\n")
+            file.write(f"Всего ячеек: {total_cells}\n")
+            file.write(f"Свободных ячеек: {free_cells}\n")
+            file.write(f"Занятых ячеек: {total_cells - free_cells}\n")
+            file.write(f"Заполнение ячеек: {((total_cells - free_cells) / total_cells * 100):.1f}%\n\n")
+            
+            # б) Заполнение по массе в процентах
+            file.write("ЗАПОЛНЕНИЕ ПО МАССЕ:\n")
+            file.write(f"Заполнение по массе: {weight_percentage:.1f}%\n\n")
+            
+            # Детальная информация
+            file.write("ДЕТАЛЬНАЯ ИНФОРМАЦИЯ ПО СТЕЛЛАЖАМ:\n")
+            file.write("-" * 50 + "\n")
+            for rack in self.racks:
+                current_weight = self._get_rack_current_weight(rack.code)
+                used_cells = sum(1 for cell in rack.cells if cell is not None)
+                rack_percentage = (current_weight / rack.max_weight * 100) if rack.max_weight > 0 else 0
+                
+                file.write(f"\nСтеллаж {rack.number} (код: {rack.code}):\n")
+                file.write(f"  Ячеек: {used_cells}/{rack.cells_count} занято\n")
+                file.write(f"  Масса: {current_weight}/{rack.max_weight}кг ({rack_percentage:.1f}%)\n")
+                
+                # Список грузов на этом стеллаже
+                for position in self.positions:
+                    if position.rack_code == rack.code:
+                        cargo = self._find_cargo_by_code(position.cargo_code)
+                        cargo_name = cargo.name if cargo else "Неизвестный груз"
+                        file.write(f"  Ячейка {position.cell_number}: {cargo_name} - {position.weight}кг\n")
+        
+        print(f"Отчет сохранен в файл: {filename}")
+        print(f"\nРезультаты расчета:")
+        print(f"а) Свободных ячеек: {free_cells} из {total_cells}")
+        print(f"б) Заполнение по массе: {weight_percentage:.1f}%")
+        
+        return free_cells, weight_percentage
+
+
+# ========== ДЕМОНСТРАЦИЯ ==========
+def demo_system():
+    """Демонстрация работы системы"""
+    print("=" * 60)
+    print("ДЕМОНСТРАЦИЯ СИСТЕМЫ УПРАВЛЕНИЯ СКЛАДОМ")
+    print("=" * 60)
+    
+    # 1. Создаем систему
+    warehouse = WarehouseSystem()
+    
+    # 2. Создаем стеллажи (как в таблице Стеллажи)
+    print("\n1. Создаем стеллажи:")
+    rack1 = Rack("R001", 1, 10, 1000)   # код R001, номер 1, 10 ячеек, 1000кг
+    rack2 = Rack("R002", 2, 8, 800)     # код R002, номер 2, 8 ячеек, 800кг
+    rack3 = Rack("R003", 3, 12, 1500)   # код R003, номер 3, 12 ячеек, 1500кг
+    
+    warehouse.add_rack(rack1)
+    warehouse.add_rack(rack2)
+    warehouse.add_rack(rack3)
+    
+    for rack in warehouse.racks:
+        print(f"  - {rack}")
+    
+    # 3. Создаем грузы (как в таблице Груз)
+    print("\n2. Создаем грузы:")
+    cargo1 = Cargo("C001", "Бумага офисная")
+    cargo2 = Cargo("C002", "Канцелярские товары")
+    cargo3 = Cargo("C003", "Оргтехника")
+    cargo4 = Cargo("C004", "Офисная мебель")
+    
+    warehouse.add_cargo(cargo1)
+    warehouse.add_cargo(cargo2)
+    warehouse.add_cargo(cargo3)
+    warehouse.add_cargo(cargo4)
+    
+    for cargo in warehouse.cargos:
+        print(f"  - {cargo}")
+    
+    # 4. Размещаем грузы (как в таблице Позиция)
+    print("\n3. Размещаем грузы на стеллажах:")
+    
+    # Позиция 1: груз C001 на стеллаж R001, ячейка 0, 50кг
+    if warehouse.place_cargo("C001", "R001", 0, 50):
+        print("  - Груз 'Бумага офисная' размещен на стеллаже 1, ячейка 0")
+    
+    # Позиция 2: груз C001 на стеллаж R001, ячейка 1, 60кг
+    if warehouse.place_cargo("C001", "R001", 1, 60):
+        print("  - Груз 'Бумага офисная' размещен на стеллаже 1, ячейка 1")
+    
+    # Позиция 3: груз C002 на стеллаж R001, ячейка 2, 30кг
+    if warehouse.place_cargo("C002", "R001", 2, 30):
+        print("  - Груз 'Канцелярские товары' размещен на стеллаже 1, ячейка 2")
+    
+    # Позиция 4: груз C003 на стеллаж R002, ячейка 0, 200кг
+    if warehouse.place_cargo("C003", "R002", 0, 200):
+        print("  - Груз 'Оргтехника' размещен на стеллаже 2, ячейка 0")
+    
+    # Позиция 5: груз C004 на стеллаж R003, ячейка 0, 500кг
+    if warehouse.place_cargo("C004", "R003", 0, 500):
+        print("  - Груз 'Офисная мебель' размещен на стеллаже 3, ячейка 0")
+    
+    # 5. Генерируем отчет в файл
+    print("\n4. Генерируем отчет...")
+    warehouse.generate_report()
+    
+    print("\n" + "=" * 60)
+    print("Демонстрация завершена. Проверьте файл 'warehouse_report.txt'")
+    print("=" * 60)
+
+
+# ========== ТЕСТОВЫЙ БЛОК ==========
+def test_system():
+    """Тестирование системы"""
+    print("\n" + "=" * 60)
+    print("ТЕСТИРОВАНИЕ СИСТЕМЫ")
+    print("=" * 60)
+    
+    warehouse = WarehouseSystem()
+    
+    # Добавляем тестовые данные
+    warehouse.add_rack(Rack("TEST1", 1, 5, 100))
+    warehouse.add_rack(Rack("TEST2", 2, 3, 50))
+    
+    warehouse.add_cargo(Cargo("TEST_C1", "Тестовый груз 1"))
+    warehouse.add_cargo(Cargo("TEST_C2", "Тестовый груз 2"))
+    
+    # Тест 1: Размещение груза
+    print("\nТест 1: Размещение груза...")
+    success = warehouse.place_cargo("TEST_C1", "TEST1", 0, 30)
+    print(f"  Результат: {'Успешно' if success else 'Ошибка'}")
+    
+    # Тест 2: Размещение в занятую ячейку
+    print("\nТест 2: Размещение в занятую ячейку...")
+    success = warehouse.place_cargo("TEST_C2", "TEST1", 0, 20)
+    print(f"  Результат: {'Успешно' if success else 'Ошибка (ожидаемо)'}")
+    
+    # Тест 3: Размещение с превышением массы
+    print("\nТест 3: Размещение с превышением массы...")
+    success = warehouse.place_cargo("TEST_C2", "TEST2", 0, 60)  # больше 50кг
+    print(f"  Результат: {'Успешно' if success else 'Ошибка (ожидаемо)'}")
+    
+    # Тест 4: Расчет свободных ячеек
+    print("\nТест 4: Расчет свободных ячеек...")
+    free_cells, total_cells = warehouse.calculate_free_cells()
+    print(f"  Свободных ячеек: {free_cells} из {total_cells}")
+    
+    # Тест 5: Расчет заполнения по массе
+    print("\nТест 5: Расчет заполнения по массе...")
+    percentage = warehouse.calculate_weight_percentage()
+    print(f"  Заполнение по массе: {percentage:.1f}%")
+    
+    print("\n" + "=" * 60)
+
+
+# ========== ЗАПУСК ПРОГРАММЫ ==========
+if __name__ == "__main__":
+    # Основная демонстрация
+    demo_system()
+    
+    # Опционально: запустить тестирование
+    # test_system()
